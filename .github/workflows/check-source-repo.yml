@@ -1,0 +1,5 @@
+name: Check Source Repository
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # Check every 30 minutes
+  workflow_dispatch:
