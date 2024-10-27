@@ -4,4 +4,68 @@ on:
     types: [proxy_list_updated]
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'  # Run every 6 hours as a fallback
+    - cron: "0 */6 * * *" # Run every 6 hours as a fallback
+
+jobs:
+  format-proxies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+
+      - name: Create script directory
+        run: mkdir -p scripts
+
+      - name: Create proxy formatter script
+        run: |
+          cat > scripts/format_proxies.py << 'EOF'
+          import requests
+          import os
+
+          BASE_URL = "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master"
+          PROXY_TYPES = ["http", "socks4", "socks5"]
+
+          def format_proxies(content, proxy_type):
+              lines = content.strip().split('\n')
+              formatted_lines = [f"{proxy_type}://{line}" for line in lines if line.strip()]
+              return '\n'.join(formatted_lines)
+
+          def main():
+              for proxy_type in PROXY_TYPES:
+                  url = f"{BASE_URL}/{proxy_type}.txt"
+                  response = requests.get(url)
+                  
+                  if response.status_code == 200:
+                      formatted_content = format_proxies(response.text, proxy_type)
+                      
+                      with open(f"{proxy_type}.txt", "w") as f:
+                          f.write(formatted_content)
+                      
+                      print(f"Successfully formatted {proxy_type} proxies")
+                  else:
+                      print(f"Failed to fetch {proxy_type} proxies")
+
+          if __name__ == "__main__":
+              main()
+          EOF
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run proxy formatter
+        run: python scripts/format_proxies.py
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Commit and push if changed
+        run: |
+          git add *.txt
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update formatted proxy lists" && git push)

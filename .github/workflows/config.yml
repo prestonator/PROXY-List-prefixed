@@ -1,1 +1,40 @@
+name: Configure Workflow Settings
 
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  repository-projects: write
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Update workflow configuration
+        run: |
+          # Create or update the configuration file
+          cat > .github/config/workflow-config.json << EOF
+          {
+            "sourceRepo": "TheSpeedX/PROXY-List",
+            "targetBranch": "master",
+            "checkInterval": 30,
+            "lastChecked": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          }
+          EOF
+
+      - name: Commit configuration
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add .github/config/workflow-config.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update workflow configuration" && git push)
+
+env:
+  SOURCE_REPO: "TheSpeedX/PROXY-List"
+  TARGET_BRANCH: "master"
+  CHECK_INTERVAL: "30" # minutes

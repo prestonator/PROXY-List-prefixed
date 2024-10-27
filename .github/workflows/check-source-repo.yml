@@ -1,5 +1,76 @@
 name: Check Source Repository
+
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Check every 30 minutes
+    - cron: "*/30 * * * *"
   workflow_dispatch:
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      actions: write
+      repository-projects: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Load configuration
+        id: config
+        run: |
+          if [ -f ".github/config/workflow-config.json" ]; then
+            echo "Using existing configuration"
+            CONFIG=$(cat .github/config/workflow-config.json)
+            echo "config=$CONFIG" >> $GITHUB_OUTPUT
+          else
+            echo "Using default configuration"
+            echo "config={\"sourceRepo\":\"TheSpeedX/PROXY-List\",\"checkInterval\":30}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate App Token
+        id: generate_token
+        uses: tibdex/github-app-token@v1
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Check for updates
+        run: |
+          CONFIG='${{ steps.config.outputs.config }}'
+          SOURCE_REPO=$(echo $CONFIG | jq -r '.sourceRepo')
+          
+          LAST_COMMIT=$(curl -s "https://api.github.com/repos/$SOURCE_REPO/commits/master" | jq -r .sha)
+          echo "Latest commit SHA: $LAST_COMMIT"
+
+          # Store the commit SHA in environment variables
+          echo "LAST_COMMIT=$LAST_COMMIT" >> $GITHUB_ENV
+
+          # Create a temporary file to store the last processed commit
+          TEMP_FILE="/tmp/last_commit_${GITHUB_REPOSITORY_ID}.txt"
+
+          # Check if the commit has changed
+          if [ ! -f "$TEMP_FILE" ] || [ "$(cat $TEMP_FILE)" != "$LAST_COMMIT" ]; then
+            echo "New changes detected in source repository"
+            echo $LAST_COMMIT > "$TEMP_FILE"
+            
+            # Trigger the proxy formatter workflow using repository dispatch
+            curl -X POST \
+              -H "Authorization: Bearer ${{ steps.generate_token.outputs.token }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Content-Type: application/json" \
+              ${{ github.api_url }}/repos/${{ github.repository }}/dispatches \
+              --data '{
+                "event_type": "proxy_list_updated",
+                "client_payload": {
+                  "commit_sha": "'"$LAST_COMMIT"'",
+                  "timestamp": "'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'"
+                }
+              }'
+            
+            echo "Triggered proxy formatter workflow"
+          else
+            echo "No new changes in source repository"
+          fi
