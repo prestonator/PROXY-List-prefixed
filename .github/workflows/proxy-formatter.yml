@@ -1,0 +1,7 @@
+name: Proxy List Formatter
+on:
+  repository_dispatch:
+    types: [proxy_list_updated]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'  # Run every 6 hours as a fallback
